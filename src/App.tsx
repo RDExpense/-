@@ -294,23 +294,18 @@ export default function App() {
                             const { cx, cy, viewBox } = props;
                             if (cx === undefined || cy === undefined) return null;
                             
-                            const chartWidth = viewBox?.width || 800;
                             const labelWidth = 110;
-                            let labelX = cx + 10;
-                            
-                            if (labelX + labelWidth > chartWidth) {
-                              labelX = cx - labelWidth - 10;
-                            }
+                            const labelX = cx + 10;
 
                             return (
                               <g>
                                 <circle cx={cx} cy={cy} r={5} fill="#ef4444" stroke="#fff" strokeWidth={2} />
-                                <g transform={`translate(${labelX}, ${cy - 20})`}>
+                                <g transform={`translate(${labelX}, ${cy - 25})`}>
                                   <rect 
-                                    x="-5" 
-                                    y="-15" 
+                                    x="0" 
+                                    y="0" 
                                     width={labelWidth} 
-                                    height="55" 
+                                    height="50" 
                                     fill="white" 
                                     fillOpacity={0.9} 
                                     rx="6" 
@@ -318,13 +313,13 @@ export default function App() {
                                     strokeWidth="0.5"
                                     style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}
                                   />
-                                  <text fill="#ef4444" fontSize={12} fontWeight="bold">
+                                  <text x="8" y="18" fill="#ef4444" fontSize={12} fontWeight="bold">
                                     最新: {latestValue.toFixed(2)}%
                                   </text>
-                                  <text fill="#64748b" fontSize={10} dy={16} fontWeight="medium">
+                                  <text x="8" y="32" fill="#64748b" fontSize={10} fontWeight="medium">
                                     环比 {latestChange >= 0 ? '+' : ''}{latestChange.toFixed(2)}%
                                   </text>
-                                  <text fill="#64748b" fontSize={10} dy={32} fontWeight="medium">
+                                  <text x="8" y="44" fill="#64748b" fontSize={10} fontWeight="medium">
                                     {latestPercentile}% 分位
                                   </text>
                                 </g>
@@ -393,7 +388,12 @@ export default function App() {
                       <StatRow 
                         label="最新溢价率" 
                         value={`${globalStats.latest.value.toFixed(2)}%`} 
-                        subValue={`分位数: ${globalStats.percentile}%`}
+                        subValue={
+                          <>
+                            <span className="block">日期: {formatDate(globalStats.latest.date, 'yyyy/MM/dd')}</span>
+                            <span className="block">分位数: {globalStats.percentile}%</span>
+                          </>
+                        }
                         color="text-bento-primary" 
                       />
                       <StatRow 
@@ -451,14 +451,14 @@ export default function App() {
   );
 }
 
-function StatRow({ label, value, subValue, color = "text-bento-text-main", icon }: { label: string, value: string, subValue?: string, color?: string, icon?: React.ReactNode }) {
+function StatRow({ label, value, subValue, color = "text-bento-text-main", icon }: { label: string, value: string, subValue?: React.ReactNode, color?: string, icon?: React.ReactNode }) {
   return (
     <div className="flex justify-between items-start py-3 border-b border-bento-border last:border-0">
       <div className="flex gap-2">
         {icon && <div className="mt-0.5">{icon}</div>}
         <div>
           <span className="text-[13px] text-bento-text-muted block">{label}</span>
-          {subValue && <span className="text-[10px] text-slate-400 font-medium">{subValue}</span>}
+          {subValue && <div className="text-[10px] text-slate-400 font-medium leading-tight">{subValue}</div>}
         </div>
       </div>
       <span className={`text-lg font-bold ${color}`}>{value}</span>
