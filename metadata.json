@@ -1,0 +1,6 @@
+{
+  "name": "转债百元溢价率",
+  "description": "Upload Excel files to visualize 'Premium Rate per 100 Yuan' trends over time with interactive charts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
