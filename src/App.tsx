@@ -4,7 +4,6 @@
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
-import * as XLSX from 'xlsx';
 import { 
   XAxis, 
   YAxis, 
@@ -17,9 +16,10 @@ import {
   ReferenceDot,
   Label
 } from 'recharts';
-import { format, isValid } from 'date-fns';
-import { Upload, AlertCircle, Clock, ArrowRight, ChevronUp, ChevronDown } from 'lucide-react';
+import { format, isValid, parse } from 'date-fns';
+import { AlertCircle, Clock, ArrowRight, ChevronUp, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { RAW_DATA } from './data';
 
 interface DataPoint {
   date: string;
@@ -120,99 +120,37 @@ const CustomAnnotation = (props: any) => {
 };
 
 export default function App() {
-  const [rawData, setRawData] = useState<DataPoint[]>([]);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  
-  const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
-
-  const processExcel = useCallback((file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
+  const processedInitialData = useMemo(() => {
+    return RAW_DATA.map(([dateVal, value]) => {
+      let normalizedDate = '';
       try {
-        const bstr = e.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary', cellDates: true });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
-        const jsonData = XLSX.utils.sheet_to_json(ws, { raw: false });
-
-        if (jsonData.length === 0) {
-          setError('文件内容为空');
-          return;
+        const d = new Date(dateVal);
+        if (isValid(d)) {
+          normalizedDate = format(d, 'yyyy-MM-dd');
+        } else {
+          normalizedDate = String(dateVal);
         }
-
-        const firstRow = jsonData[0] as any;
-        const dateKey = Object.keys(firstRow).find(k => k.includes('日期') || k.toLowerCase().includes('date'));
-        const valueKey = Object.keys(firstRow).find(k => k.includes('百元溢价率') || k.includes('溢价率'));
-
-        if (!dateKey || !valueKey) {
-          setError('未找到“日期”或“百元溢价率”列。请检查表格表头。');
-          return;
-        }
-
-        const processedData: DataPoint[] = jsonData
-          .map((row: any) => {
-            let dateVal = row[dateKey];
-            let valueStr = String(row[valueKey]);
-            let numVal = parseFloat(valueStr.replace('%', ''));
-
-            // Normalize date to yyyy-MM-dd
-            let normalizedDate = '';
-            try {
-              const d = new Date(dateVal);
-              if (isValid(d)) {
-                normalizedDate = format(d, 'yyyy-MM-dd');
-              } else {
-                normalizedDate = String(dateVal);
-              }
-            } catch {
-              normalizedDate = String(dateVal);
-            }
-
-            return {
-              date: normalizedDate,
-              value: isNaN(numVal) ? 0 : numVal
-            };
-          })
-          .filter(d => d.date && !isNaN(d.value))
-          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-        setRawData(processedData);
-        if (processedData.length > 0) {
-          // Default range: 2023-01-01 to latest
-          const latestDate = processedData[processedData.length - 1].date;
-          const defaultStart = '2023-01-01';
-          setDateRange({
-            start: processedData[0].date > defaultStart ? processedData[0].date : defaultStart,
-            end: latestDate
-          });
-        }
-        setFileName(file.name);
-        setError(null);
-      } catch (err) {
-        console.error(err);
-        setError('解析文件时出错，请确保是有效的 Excel 文件。');
+      } catch {
+        normalizedDate = String(dateVal);
       }
-    };
-    reader.readAsBinaryString(file);
+      return {
+        date: normalizedDate,
+        value: value * 100 // Convert to percentage
+      };
+    })
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, []);
 
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
-      processExcel(file);
-    } else {
-      setError('请上传 .xlsx 或 .xls 格式的文件');
-    }
-  }, [processExcel]);
-
-  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) processExcel(file);
-  };
+  const [rawData] = useState<DataPoint[]>(processedInitialData);
+  
+  const [dateRange, setDateRange] = useState<{ start: string; end: string }>(() => {
+    const latestDate = processedInitialData[processedInitialData.length - 1].date;
+    const defaultStart = '2023-01-01';
+    return {
+      start: processedInitialData[0].date > defaultStart ? processedInitialData[0].date : defaultStart,
+      end: latestDate
+    };
+  });
 
   const filteredData = useMemo(() => {
     if (!dateRange.start || !dateRange.end) return rawData;
@@ -282,49 +220,11 @@ export default function App() {
       </header>
 
       <main className="flex-grow">
-        <AnimatePresence mode="wait">
-          {rawData.length === 0 ? (
-            <motion.div
-              key="empty"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="h-[60vh] flex items-center justify-center"
-            >
-              <div
-                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={onDrop}
-                className={`bento-card drop-zone w-full max-w-xl p-16 flex flex-col items-center justify-center text-center cursor-pointer border-2 border-dashed ${isDragging ? 'active' : ''}`}
-                onClick={() => document.getElementById('fileInput')?.click()}
-              >
-                <input
-                  id="fileInput"
-                  type="file"
-                  accept=".xlsx, .xls"
-                  className="hidden"
-                  onChange={onFileChange}
-                />
-                <div className="text-4xl mb-4">📄</div>
-                <h3 className="text-xl font-bold text-bento-text-main mb-2">上传数据文件</h3>
-                <p className="text-sm text-bento-text-muted mb-6">支持 .xlsx, .xls 格式</p>
-                <button className="bg-bento-primary text-white px-6 py-2.5 rounded-xl font-semibold hover:opacity-90 transition-opacity shadow-lg shadow-blue-500/20">
-                  选择文件
-                </button>
-                {error && (
-                  <p className="mt-4 text-sm text-red-500 font-medium flex items-center gap-2">
-                    <AlertCircle size={16} /> {error}
-                  </p>
-                )}
-              </div>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="grid"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="grid grid-cols-1 lg:grid-cols-12 gap-6"
-            >
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="grid grid-cols-1 lg:grid-cols-12 gap-6"
+        >
               <div className="lg:col-span-8 bento-card flex flex-col min-h-[500px]">
                 <div className="card-title">
                   <span className="dot"></span>
@@ -486,25 +386,6 @@ export default function App() {
               </div>
 
               <div className="lg:col-span-4 flex flex-col gap-6">
-                <div
-                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                  onDragLeave={() => setIsDragging(false)}
-                  onDrop={onDrop}
-                  className={`bento-card drop-zone flex flex-col items-center justify-center text-center cursor-pointer border-2 border-dashed py-8 ${isDragging ? 'active' : ''}`}
-                  onClick={() => document.getElementById('fileInput')?.click()}
-                >
-                  <input
-                    id="fileInput"
-                    type="file"
-                    accept=".xlsx, .xls"
-                    className="hidden"
-                    onChange={onFileChange}
-                  />
-                  <div className="text-2xl mb-2">📄</div>
-                  <p className="text-sm font-bold text-bento-text-main">更新数据文件</p>
-                  <p className="text-[11px] text-bento-text-muted mt-1">{fileName}</p>
-                </div>
-
                 {globalStats && (
                   <div className="bento-card flex-grow">
                     <div className="card-title">核心指标摘要</div>
@@ -531,12 +412,6 @@ export default function App() {
                       />
                       <StatRow label="样本总数" value={globalStats.count.toString()} />
                     </div>
-                    <button 
-                      onClick={() => setRawData([])}
-                      className="w-full mt-6 py-2 text-xs font-semibold text-slate-400 hover:text-red-500 transition-colors uppercase tracking-widest"
-                    >
-                      清除所有数据
-                    </button>
                   </div>
                 )}
               </div>
@@ -565,9 +440,7 @@ export default function App() {
                   </table>
                 </div>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        </motion.div>
       </main>
 
       <footer className="mt-12 py-6 border-t border-bento-border flex justify-between items-center text-[11px] text-bento-text-muted font-medium uppercase tracking-widest">
